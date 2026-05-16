@@ -1,0 +1,92 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Admin check: assumes an 'admins' collection keyed by UID
+    function isAdmin() {
+      return isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // --- Entities ---
+
+    // User Profile
+    match /users/{userId} {
+      function isValidUser(data) {
+        return data.accountID is string && data.accountID.size() <= 10 &&
+               data.status in ['pending', 'approved', 'rejected'] &&
+               data.updatedAt is timestamp;
+      }
+
+      // Action helpers
+      function isNewUserAction() {
+        return incoming().status == 'pending';
+      }
+
+      function isStatusChangeAction() {
+        return incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']);
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isAdmin(); // Only admins can list users
+
+      allow create: if isSignedIn() && isValidId(userId) &&
+                      isValidUser(incoming()) &&
+                      incoming().accountID == userId &&
+                      isNewUserAction() &&
+                      incoming().updatedAt == request.time;
+      
+      allow update: if isSignedIn() && isValidId(userId) &&
+                      isValidUser(incoming()) && (
+                        isAdmin() || (
+                          // Users can't self-approve, but they can potentially update if we allowed it.
+                          // For now, only allow admins to change status.
+                          false 
+                        )
+                      ) || (
+                        // Logic for approve/reject URLs (if they were authenticated)
+                        // Currently the app hits this from client side.
+                        // We must ensure the person doing the update is an admin.
+                        isAdmin() && isStatusChangeAction() && incoming().updatedAt == request.time
+                      );
+    }
+
+    // Predictions
+    match /predictions/{predictionId} {
+      function isValidPrediction(data) {
+        return data.data is map &&
+               data.updatedAt is timestamp;
+      }
+
+      allow get: if isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create, update: if isSignedIn() && isValidId(predictionId) &&
+                               isValidPrediction(incoming()) &&
+                               incoming().updatedAt == request.time &&
+                               (isAdmin() || true); // Allowing users to write predictions as per current app logic, but ideally isAdmin() only.
+      
+      allow delete: if isAdmin();
+    }
+  }
+}

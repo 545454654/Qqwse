@@ -1,0 +1,68 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // --- Entities ---
+
+    // User Profile
+    match /users/{accountID} {
+      function isValidUser(data) {
+        return data.accountID is string && data.accountID.size() <= 10 &&
+               data.platform is string && data.platform.size() <= 50 &&
+               data.lastLogin is timestamp;
+      }
+
+      allow get: if true; // Needed for checking if account exists during "login"
+      allow create: if isValidId(accountID) && 
+                      isValidUser(incoming()) && 
+                      incoming().accountID == accountID &&
+                      incoming().lastLogin == request.time;
+      
+      allow update: if isValidId(accountID) && 
+                      isValidUser(incoming()) &&
+                      incoming().accountID == existing().accountID &&
+                      incoming().diff(existing()).affectedKeys().hasOnly(['platform', 'lastLogin']) &&
+                      incoming().lastLogin == request.time;
+    }
+
+    // Predictions
+    match /predictions/{predictionId} {
+      function isValidPrediction(data) {
+        return data.userId is string && data.userId.size() <= 10 &&
+               data.platform is string && data.platform.size() <= 50 &&
+               data.timestamp is timestamp &&
+               data.grid is list && data.grid.size() == 5;
+      }
+
+      allow get: if true;
+      allow create: if isValidId(predictionId) && 
+                      isValidPrediction(incoming()) &&
+                      incoming().timestamp == request.time &&
+                      exists(/databases/$(database)/documents/users/$(incoming().userId));
+      
+      // Predictions are immutable
+      allow update, delete: if false;
+    }
+  }
+}

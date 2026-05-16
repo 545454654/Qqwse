@@ -1,0 +1,6 @@
+{
+  "name": "DOCTOR megapari",
+  "description": "Professional prediction and account management script for gaming platforms with real-time Firestore synchronization and Telegram activation flow.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

@@ -1,0 +1,35 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user of the prediction system.",
+      "type": "object",
+      "properties": {
+        "accountID": { "type": "string", "description": "The unique account ID provided by the user." },
+        "status": { "type": "string", "enum": ["pending", "approved", "rejected"], "description": "The activation status of the user." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "The last time the status was updated." }
+      },
+      "required": ["accountID", "status"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "Stores current game predictions.",
+      "type": "object",
+      "properties": {
+        "data": { "type": "object", "description": "The prediction data mapping m1-m50 to values." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "When the prediction was last updated." }
+      },
+      "required": ["data", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User account status and activation records."
+    },
+    "/predictions/{predictionId}": {
+      "schema": "Prediction",
+      "description": "Current active predictions for the game."
+    }
+  }
+}
